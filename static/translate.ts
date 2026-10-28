@@ -1,10 +1,10 @@
 /**
  * Browser translation pipeline for the static build. It follows the same order
- * as the server route: your saved wording, the curated phrase library, the
- * reviewed beginner vocabulary, and only then a live provider.
+ * as the server route: your saved wording, the curated phrase library, then the
+ * AI translator, and only then the classic machine providers.
  */
 import { findLocalTranslationDetails, getLanguage, normalizeText } from "@/lib/languages";
-import { findLessonTranslation } from "@/lib/lessons";
+import { translateWithAI } from "@/lib/ai";
 import {
   cleanProviderText,
   isPlausibleTranslation,
@@ -66,14 +66,13 @@ function finalize(protectedText: string, translated: string, tokens: ReturnType<
 async function translateWithLibreTranslate(text: string, source: string, target: string): Promise<MachineTranslation> {
   const base = store.prefs.libreUrl.trim().replace(/\/$/, "");
   if (!base) throw new ProviderError("LibreTranslate is not configured.");
-  const code = (value: string) => (value === "zh-CN" ? "zh" : value);
   const protectedInput = protectTranslationTokens(text);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (store.prefs.libreKey) headers.Authorization = `Bearer ${store.prefs.libreKey}`;
   const response = await fetchWithTimeout(`${base}/translate`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ q: protectedInput.text, source: code(source), target: code(target), format: "text", ...(store.prefs.libreKey ? { api_key: store.prefs.libreKey } : {}) }),
+    body: JSON.stringify({ q: protectedInput.text, source, target, format: "text", ...(store.prefs.libreKey ? { api_key: store.prefs.libreKey } : {}) }),
   }, 10000);
   if (!response.ok) throw new ProviderError("LibreTranslate unavailable.");
   const result = await response.json() as { translatedText?: unknown };
@@ -139,7 +138,6 @@ export async function translateText(text: string, sourceLang: string, targetLang
   // An explicit saved correction is more specific to you than the shared library.
   const remembered = findRemembered(sourceText, sourceLang, targetLang);
   const local = remembered ? null : findLocalTranslationDetails(sourceText, sourceLang, targetLang);
-  const lesson = remembered || local ? null : findLessonTranslation(sourceText, sourceLang, targetLang);
 
   if (remembered) {
     return { sourceText, translatedText: remembered, sourceLang, targetLang, provider: "Your phrasebook", quality: "remembered", note: "Using your saved wording for this phrase." };
@@ -147,11 +145,16 @@ export async function translateText(text: string, sourceLang: string, targetLang
   if (local) {
     return { sourceText, translatedText: local.text, sourceLang, targetLang, provider: "Salita phrase library", quality: "curated", ...(local.note ? { note: local.note } : {}) };
   }
-  if (lesson) {
-    return { sourceText, translatedText: lesson, sourceLang, targetLang, provider: "Salita phrase library", quality: "curated" };
-  }
 
   const attempts: (() => Promise<MachineTranslation>)[] = [];
+  // A language model handles Philippine regional languages far better than
+  // generic machine translation, so it is tried first when the learner wants it.
+  if (store.prefs.aiEnabled) {
+    attempts.push(async () => {
+      const ai = await translateWithAI(sourceText, sourceLang, targetLang);
+      return { text: ai.text, provider: ai.provider, quality: ai.quality, note: ai.note };
+    });
+  }
   if (store.prefs.libreUrl.trim()) attempts.push(() => translateWithLibreTranslate(sourceText, sourceLang, targetLang));
   attempts.push(() => translateWithMyMemory(sourceText, sourceLang, targetLang), () => translateWithGoogle(sourceText, sourceLang, targetLang));
 

@@ -4,12 +4,14 @@ import { db } from "@/db";
 import { translations } from "@/db/schema";
 import { getViewer } from "@/lib/workspace";
 import { findLocalTranslationDetails, getLanguage, languages, normalizeText } from "@/lib/languages";
-import { findLessonTranslation } from "@/lib/lessons";
+import { translateWithAI } from "@/lib/ai";
 import { translateWithProvider } from "@/lib/translation";
 import type { TranslationQuality } from "@/lib/types";
 
 export const runtime = "nodejs";
 const limits = new Map<string, { count: number; reset: number }>();
+/** Set SALITA_AI_DISABLED=1 to serve only the curated library and classic providers. */
+const aiEnabled = process.env.SALITA_AI_DISABLED !== "1";
 
 async function findRememberedTranslation(userId: string, text: string, sourceLang: string, targetLang: string) {
   const rows = await db.select({ sourceText: translations.sourceText, translatedText: translations.translatedText })
@@ -51,7 +53,6 @@ export async function POST(request: NextRequest) {
       // generic library, so it wins for the same normalized source phrase.
       const remembered = await findRememberedTranslation(user.id, sourceText, sourceLang, targetLang);
       const local = remembered ? null : findLocalTranslationDetails(sourceText, sourceLang, targetLang);
-      const lesson = remembered || local ? null : findLessonTranslation(sourceText, sourceLang, targetLang);
       if (remembered) {
         translatedText = remembered;
         provider = "Your phrasebook";
@@ -60,8 +61,20 @@ export async function POST(request: NextRequest) {
       } else if (local) {
         translatedText = local.text;
         note = local.note;
-      } else if (lesson) {
-        translatedText = lesson;
+      }
+    }
+
+    if (!translatedText) {
+      // A language model handles Philippine regional languages far better than
+      // generic machine translation, so it is tried before the classic APIs.
+      if (aiEnabled) {
+        try {
+          const ai = await translateWithAI(sourceText, sourceLang, targetLang);
+          translatedText = ai.text;
+          provider = ai.provider;
+          quality = ai.quality;
+          note = ai.note;
+        } catch { /* fall through to the machine providers */ }
       }
     }
 

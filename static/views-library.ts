@@ -1,7 +1,7 @@
 /** Phrasebook, translation history, collections, and settings. */
 import {
   ArrowDownToLine, ArrowLeft, ArrowUpRight, BookOpen, Bookmark, ChevronDown, Download, FolderOpen,
-  History, Languages, Pencil, Plus, RefreshCcw, Server, Settings2, ShieldCheck, Trash2, Upload, Volume2, Check,
+  History, Languages, Pencil, Plus, RefreshCcw, Server, Settings2, ShieldCheck, Sparkles, Trash2, Upload, Volume2, Check,
 } from "lucide";
 import type { Collection, Phrase } from "./core";
 import { emptyState, formatDate, getLanguage, h, icon, iconButton, languages, notify, replace, searchField, sectionIcon, speak, spinner, store } from "./core";
@@ -231,6 +231,8 @@ export function SettingsPage(): PageResult {
   libreUrl.value = store.prefs.libreUrl;
   const libreKey = h("input", { type: "password", placeholder: "Optional API key", "aria-label": "LibreTranslate API key", autoComplete: "off" }) as HTMLInputElement;
   libreKey.value = store.prefs.libreKey;
+  const aiToggle = h("input", { type: "checkbox", "aria-label": "Use Salita AI" }) as HTMLInputElement;
+  aiToggle.checked = store.prefs.aiEnabled;
 
   const importInput = h("input", {
     type: "file",
@@ -326,6 +328,22 @@ export function SettingsPage(): PageResult {
           h("button", { class: "button secondary", onClick: () => importInput.click(), style: { marginTop: "9px" } }, icon(Upload, 16), "Import workspace"),
           importInput),
         h("section", { class: "card settings-card" },
+          sectionIcon(Sparkles, "purple"),
+          h("h2", null, "Salita AI"),
+          h("p", null, "A free, key-less language model translates text the curated phrasebook doesn’t cover, and powers the learning assistant that explains nuance, examples, and culture. Turning it off keeps Salita on the offline phrase library and the classic translation providers only."),
+          h("label", { class: "toggle-row", style: { display: "flex", alignItems: "center", gap: "10px", marginTop: "17px", cursor: "pointer", fontWeight: "500" } },
+            aiToggle,
+            "Use AI for translation and the assistant"),
+          h("button", {
+            class: "button primary",
+            style: { marginTop: "13px" },
+            onClick: () => {
+              store.prefs.aiEnabled = aiToggle.checked;
+              store.savePrefs();
+              notify(store.prefs.aiEnabled ? "Salita AI is on." : "Salita AI is off — curated phrases and classic providers only.");
+            },
+          }, icon(Check, 16), "Save AI preference")),
+        h("section", { class: "card settings-card" },
           sectionIcon(Server, "mint"),
           h("h2", null, "Live translation"),
           h("p", null, "Optional. Point Salita at your own LibreTranslate instance for private machine translation. Without one, uncatalogued text falls back to MyMemory and then Google’s public endpoint — and curated phrases keep working offline."),
@@ -334,7 +352,7 @@ export function SettingsPage(): PageResult {
             style: { padding: "0", gap: "13px", marginTop: "17px" },
             onSubmit: (event: Event) => {
               event.preventDefault();
-              store.prefs = { libreUrl: libreUrl.value.trim(), libreKey: libreKey.value.trim() };
+              store.prefs = { libreUrl: libreUrl.value.trim(), libreKey: libreKey.value.trim(), aiEnabled: aiToggle.checked };
               store.savePrefs();
               notify(store.prefs.libreUrl ? "Live translation will try your LibreTranslate instance first." : "Using the public translation fallbacks.");
             },

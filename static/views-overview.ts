@@ -7,6 +7,7 @@ import type { Language } from "@/lib/types";
 import { getLanguage, getStreak, h, icon, iconButton, languages, nativeLanguages, notify, replace, speak, store } from "./core";
 import { LessonDialog, CourseCard } from "./learn";
 import { Translator } from "./translator";
+import { AssistantPanel } from "./assistant";
 import { navigate, openPhrasebook } from "./state";
 
 function greeting(): string {
@@ -167,24 +168,32 @@ export function OverviewPage(): { element: HTMLElement; refresh: () => void } {
 }
 
 export function TranslatePage(): { element: HTMLElement; refresh?: () => void } {
+  const assistant = AssistantPanel();
   const element = h("div", null,
     h("div", { class: "page-heading" },
       h("div", null,
-        h("span", { class: "eyebrow" }, "WORDS WITHOUT BORDERS"),
+        h("span", { class: "eyebrow" }, "PHILIPPINE LANGUAGES, ONE WORKSPACE"),
         h("h1", null, "Every word opens a door", h("span", { class: "green-period" }, ".")),
         h("p", null, "From a simple hello to a meaningful conversation.")),
       h("span", { class: "soft-badge" }, h("span", { class: "tiny-dot" }), `${languages.length} languages, one workspace`)),
-    Translator(true),
+    h("div", { class: "translate-layout" },
+      Translator(true),
+      assistant.element),
     h("div", { class: "translation-notes" },
       h("div", { class: "card" },
         h("span", { class: "section-icon mint" }, icon(Languages, 21)),
         h("h3", null, "Local words. Real connections."),
-        h("p", null, "Explore Filipino, Cebuano, Ilocano, Hiligaynon, Waray, Kapampangan, Pangasinan, and Bikol. Regional language coverage varies; everyday phrases are built in."),
+        h("p", null, "Explore Filipino, Cebuano, Ilocano, Hiligaynon, Waray, Kapampangan, Pangasinan, and Bikol. Every phrase is checked against a published dictionary or phrasebook, and anything we cannot source is left out rather than guessed."),
         h("button", { class: "text-button", onClick: () => navigate("learn") }, "Meet the languages ", icon(ArrowUpRight, 15))),
+      h("div", { class: "card" },
+        h("span", { class: "section-icon purple" }, icon(Sparkles, 21)),
+        h("h3", null, "Salita AI, when you need more than a word."),
+        h("p", null, "Text the curated phrasebook doesn’t cover is translated by a free, key-less language model that understands Philippine regional languages. The assistant beside it explains nuance, gives examples, and practises with you."),
+        h("button", { class: "text-button", onClick: () => navigate("settings") }, "AI preferences ", icon(ArrowUpRight, 15))),
       h("div", { class: "card" },
         h("span", { class: "section-icon peach" }, icon(Bookmark, 21)),
         h("h3", null, "Keep the words that matter."),
         h("p", null, "Tap the bookmark on any translation to add it to your phrasebook. Organize your favorites into collections for your next trip or conversation."),
         h("button", { class: "text-button", onClick: () => openPhrasebook(null) }, "Open your phrasebook ", icon(ArrowUpRight, 15)))));
-  return { element };
+  return { element, refresh: assistant.refresh };
 }

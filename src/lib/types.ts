@@ -12,7 +12,11 @@ export interface Translation {
   createdAt: string;
 }
 
-export type TranslationQuality = "curated" | "remembered" | "machine" | "direct";
+/**
+ * `ai` is a large-language-model translation: better than generic machine
+ * translation at Philippine regional languages, but still worth reviewing.
+ */
+export type TranslationQuality = "curated" | "remembered" | "ai" | "machine" | "direct";
 
 export interface TranslationMetadata {
   provider: string;
@@ -54,4 +58,10 @@ export interface Language {
   philippine?: boolean;
   image?: string;
   description?: string;
+  /**
+   * Disambiguating description handed to the AI translator. Philippine
+   * regional languages are routinely confused with Tagalog or with each other,
+   * so naming the language family and heartland materially improves output.
+   */
+  aiHint?: string;
 }

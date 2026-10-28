@@ -218,8 +218,8 @@ export interface Workspace {
   activity: Activity[];
 }
 
-/** Optional self-hosted provider, kept out of the workspace export. */
-export interface Prefs { libreUrl: string; libreKey: string }
+/** Optional self-hosted provider and AI preferences, kept out of the workspace export. */
+export interface Prefs { libreUrl: string; libreKey: string; aiEnabled: boolean }
 
 const WORKSPACE_KEY = "salita.workspace.v1";
 const PREFS_KEY = "salita.prefs.v1";
@@ -271,10 +271,10 @@ function seedWorkspace(): Workspace {
     }
   }
   const history: [string, string, string][] = [
-    ["A beautiful day", "Isang magandang araw", "tl"], ["See you soon", "Hasta pronto", "es"],
-    ["Thank you very much", "どうもありがとうございます", "ja"], ["Good night", "Maayong gabii", "ceb"],
+    ["A beautiful day", "Isang magandang araw", "tl"], ["See you soon", "Hangtod sa sunod", "ceb"],
+    ["Thank you very much", "Madamo gid nga salamat", "hil"], ["Good night", "Maong ya labi", "pag"],
     ["Where is the beach?", "Saan ang dalampasigan?", "tl"], ["Let's go", "Tara na", "tl"],
-    ["Welcome home", "Bienvenue à la maison", "fr"], ["One coffee, please", "Isang kape, pakiusap", "tl"],
+    ["Thank you", "Dios mabalos", "bcl"], ["One coffee, please", "Isang kape, pakiusap", "tl"],
   ];
   history.forEach(([sourceText, translatedText, targetLang], index) => translations.push({
     id: uid(), sourceText, translatedText, sourceLang: "en", targetLang, saved: false, collectionId: null,
@@ -317,8 +317,8 @@ function loadWorkspace(): Workspace {
 function loadPrefs(): Prefs {
   try {
     const parsed = JSON.parse(read(PREFS_KEY) || "{}") as Partial<Prefs>;
-    return { libreUrl: parsed.libreUrl || "", libreKey: parsed.libreKey || "" };
-  } catch { return { libreUrl: "", libreKey: "" }; }
+    return { libreUrl: parsed.libreUrl || "", libreKey: parsed.libreKey || "", aiEnabled: parsed.aiEnabled !== false };
+  } catch { return { libreUrl: "", libreKey: "", aiEnabled: true }; }
 }
 
 const listeners = new Set<() => void>();

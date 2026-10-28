@@ -22,10 +22,12 @@ or relative.
 
 The static build imports the real modules rather than copying them, so the words stay in sync:
 
-- `src/lib/languages.ts` — the 28 languages, the curated phrase library, aliases, and usage notes
-- `src/lib/lessons.ts` — beginner vocabulary and the reviewed cross-language bridge phrases
+- `src/lib/languages.ts` — the nine languages (English plus eight Philippine), the curated phrase
+  library, aliases, and usage notes
+- `src/lib/lessons.ts` — beginner vocabulary, derived from the same curated phrase table
 - `src/lib/translation.ts` — provider text cleaning, plausibility checks, token protection, and
   MyMemory match selection
+- `src/lib/ai.ts` — keyless AI translation and the learning assistant
 - `src/lib/client.ts` — the streak calculation
 
 ## Translation order
@@ -33,11 +35,22 @@ The static build imports the real modules rather than copying them, so the words
 1. The same language selected twice returns your text unchanged.
 2. Your saved wording for that phrase (an explicit correction beats the shared library).
 3. The curated phrase library, including multi-sentence composition. Unknown wording is never guessed.
-4. The reviewed beginner vocabulary.
+4. The Salita AI translator, a free key-less language model that handles Philippine regional
+   languages better than generic machine translation. Results are labelled as AI translation.
 5. A live provider: your LibreTranslate instance if you configured one under Settings, then
    MyMemory, then Google's public endpoint. Results are labelled as machine translation.
 
-Offline, steps 1–4 keep working; step 5 fails with a friendly message.
+Offline, steps 1–3 keep working; steps 4–5 fail with a friendly message. Turn the AI off under
+Settings → Salita AI to skip step 4 entirely.
+
+## Salita AI
+
+`src/lib/ai.ts` calls Pollinations' free text endpoint, which needs no API key and sends permissive
+CORS headers, so the published page can call it straight from the browser. The Next.js app reaches
+the same model through `/api/assistant` for the learning assistant and inline in `/api/translate`
+for translation. Every response is unwrapped, checked for refusals, and rejected if it merely echoes
+the source text, so a bad answer falls through to the next provider instead of reaching the learner.
+Set `SALITA_AI_DISABLED=1` on the server to turn it off there.
 
 ## Data
 
