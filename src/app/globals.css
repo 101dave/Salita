@@ -219,6 +219,10 @@ svg{flex-shrink:0}
 .translated-text{font-size:17px;line-height:1.6;color:#537957;letter-spacing:-.35px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:90px;overflow:auto;scrollbar-width:thin}
 .translated-text.placeholder{font-size:14px;color:#b4c0b1;letter-spacing:-.2px}
 .pronunciation{font-size:8px;letter-spacing:.15px;color:#a0b098;margin-top:8px;line-height:1.5}
+.translation-note{font-size:9px;line-height:1.55;color:#8b9c84;margin-top:10px;max-width:34em}
+.translation-output:has(.translation-note) .translated-text{max-height:76px}
+.translator-expanded .translation-note{font-size:10px;max-width:42em}
+.translator-expanded .translation-output:has(.translation-note) .translated-text{max-height:135px}
 .panel-tools{position:absolute;left:14px;right:15px;bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:25px}
 .panel-tools>div{display:flex;align-items:center;gap:2px}
 .panel-tools>.output-language{font-size:8px;color:#9bac93;display:flex;align-items:center;gap:5px}

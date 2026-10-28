@@ -6,7 +6,7 @@ import { useWorkspace } from "./workspace-provider";
 import { IconButton, LanguageSelect, Spinner } from "./ui";
 import { mutate, request } from "@/lib/client";
 import { getLanguage } from "@/lib/languages";
-import type { Translation } from "@/lib/types";
+import type { Translation, TranslationMetadata, TranslationQuality } from "@/lib/types";
 
 export function speak(text: string, language: string, onError: (message: string, type?: "success" | "error") => void) {
   if (!("speechSynthesis" in window)) { onError("Your browser doesn’t support audio pronunciation. Try Chrome or Edge.", "error"); return; }
@@ -39,23 +39,32 @@ export function Translator({ expanded = false }: { expanded?: boolean }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [provider, setProvider] = useState("Salita phrase library");
+  const [quality, setQuality] = useState<TranslationQuality>("curated");
+  const [note, setNote] = useState("");
   const [documentName, setDocumentName] = useState("");
   const [recording, setRecording] = useState(false);
   const recognitionRef = useRef<Recognition | null>(null);
+  const translationRequest = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = data.translations.find((item) => item.id === translationId);
   const bytes = new TextEncoder().encode(text).length;
 
   async function translate() {
+    if (loading) return;
     if (!text.trim()) { setError("Enter something you’d like to translate."); return; }
     if (bytes > 500) { setError("Please keep your text under 500 UTF-8 bytes."); return; }
+    const version = ++translationRequest.current;
+    const sourceText = text.trim();
+    const from = sourceLang;
+    const to = targetLang;
     setLoading(true); setError("");
     try {
-      const result = await request<{ translation: Translation; provider: string }>("/api/translate", "POST", { text, sourceLang, targetLang });
-      setOutput(result.translation.translatedText); setTranslationId(result.translation.id); setProvider(result.provider);
+      const result = await request<{ translation: Translation } & TranslationMetadata>("/api/translate", "POST", { text: sourceText, sourceLang: from, targetLang: to });
+      if (version !== translationRequest.current) return;
+      setOutput(result.translation.translatedText); setTranslationId(result.translation.id); setProvider(result.provider); setQuality(result.quality); setNote(result.note || "");
       setData((previous) => ({ ...previous, translations: [result.translation, ...previous.translations] }));
-    } catch (error) { setError(error instanceof Error ? error.message : "Please try again."); }
-    finally { setLoading(false); }
+    } catch (error) { if (version === translationRequest.current) setError(error instanceof Error ? error.message : "Please try again."); }
+    finally { if (version === translationRequest.current) setLoading(false); }
   }
 
   async function save() {
@@ -69,8 +78,12 @@ export function Translator({ expanded = false }: { expanded?: boolean }) {
     finally { setSaving(false); }
   }
 
-  function changeInput(value: string) { setText(value); setTranslationId(null); setOutput(""); setError(""); }
-  function swap() { const previous = text; setSourceLang(targetLang); setTargetLang(sourceLang); setText(output || ""); setOutput(output ? previous : ""); setTranslationId(null); setError(""); }
+  function resetResult() {
+    translationRequest.current += 1;
+    setLoading(false); setTranslationId(null); setOutput(""); setProvider("Salita phrase library"); setQuality("curated"); setNote(""); setError("");
+  }
+  function changeInput(value: string) { resetResult(); setText(value); }
+  function swap() { const nextText = output; resetResult(); setSourceLang(targetLang); setTargetLang(sourceLang); setText(nextText); }
   function record() {
     if (recording) { recognitionRef.current?.stop(); return; }
     const SpeechRecognition = (window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: new () => Recognition }).webkitSpeechRecognition;
@@ -92,12 +105,12 @@ export function Translator({ expanded = false }: { expanded?: boolean }) {
       if (new TextEncoder().encode(content).length > 500) { notify("This file is too long. Import a text file of up to 500 bytes.", "error"); event.target.value = ""; return; }
       changeInput(content); setDocumentName(file.name); notify(`Imported ${file.name}`); event.target.value = "";
     }} />
-    <div className="translator-languages"><LanguageSelect label="Translate from" value={sourceLang} onChange={(value) => { setSourceLang(value); setOutput(""); setTranslationId(null); }} /><IconButton label="Swap languages" onClick={swap}><ArrowDownUp size={16} className="swap-icon" /></IconButton><LanguageSelect label="Translate to" value={targetLang} onChange={(value) => { setTargetLang(value); setOutput(""); setTranslationId(null); }} /></div>
+    <div className="translator-languages"><LanguageSelect label="Translate from" value={sourceLang} onChange={(value) => { resetResult(); setSourceLang(value); }} /><IconButton label="Swap languages" onClick={swap}><ArrowDownUp size={16} className="swap-icon" /></IconButton><LanguageSelect label="Translate to" value={targetLang} onChange={(value) => { resetResult(); setTargetLang(value); }} /></div>
     <div className="translation-panels"><div className="translation-source">{documentName && <span className="document-name"><FileText size={12} />{documentName}</span>}<textarea aria-label="Text to translate" value={text} placeholder="Type something. Start a connection." onChange={(event) => changeInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") translate(); }} spellCheck={false} />{text && <IconButton label="Clear text" className="clear-text" onClick={() => changeInput("")}><X size={14} /></IconButton>}<div className="panel-tools"><div><IconButton label={recording ? "Stop recording" : "Use microphone"} className={recording ? "recording" : ""} onClick={record}><Mic size={17} /></IconButton><IconButton label="Listen to original" disabled={!text} onClick={() => speak(text, sourceLang, notify)}><Volume2 size={17} /></IconButton></div><span className={bytes > 500 ? "text-error" : ""}>{bytes}<span> / 500</span></span></div></div>
-    <div className={`translation-output ${loading ? "is-translating" : ""}`} aria-live="polite">{loading ? <div className="translation-loading"><div className="skeleton" /><div className="skeleton" /><span>Finding the right words…</span></div> : <><div className={`translated-text ${!output ? "placeholder" : ""}`}>{output || "Your translation will appear here"}</div>{output === "Kumusta! Kumusta ka?" && targetLang === "tl" && <p className="pronunciation">koo-moos-TAH · koo-moos-TAH kah</p>}</>}<div className="panel-tools"><span className="output-language">{output && !loading && <><span className="tiny-dot" />{getLanguage(targetLang).name}</>}</span><div><IconButton label="Listen to translation" disabled={!output || loading} onClick={() => speak(output, targetLang, notify)}><Volume2 size={17} /></IconButton><IconButton label="Copy translation" disabled={!output || loading} onClick={async () => { try { await navigator.clipboard.writeText(output); notify("Translation copied."); } catch { notify("Clipboard access is unavailable. You can select and copy the text.", "error"); } }}><Copy size={16} /></IconButton><IconButton label={current?.saved ? "Unsave phrase" : "Save to phrasebook"} className={current?.saved ? "is-saved" : ""} disabled={!output || loading || saving} onClick={save}>{saving ? <Spinner size={16} /> : current?.saved ? <Bookmark size={17} fill="currentColor" /> : <Bookmark size={17} />}</IconButton></div></div></div></div>
+    <div className={`translation-output ${loading ? "is-translating" : ""}`} aria-live="polite">{loading ? <div className="translation-loading"><div className="skeleton" /><div className="skeleton" /><span>Finding the right words…</span></div> : <><div className={`translated-text ${!output ? "placeholder" : ""}`}>{output || "Your translation will appear here"}</div>{output === "Kumusta! Kumusta ka?" && targetLang === "tl" && <p className="pronunciation">koo-moos-TAH · koo-moos-TAH kah</p>}{note && output && <p className="translation-note">{note}</p>}</>}<div className="panel-tools"><span className="output-language">{output && !loading && <><span className="tiny-dot" />{getLanguage(targetLang).name}</>}</span><div><IconButton label="Listen to translation" disabled={!output || loading} onClick={() => speak(output, targetLang, notify)}><Volume2 size={17} /></IconButton><IconButton label="Copy translation" disabled={!output || loading} onClick={async () => { try { await navigator.clipboard.writeText(output); notify("Translation copied."); } catch { notify("Clipboard access is unavailable. You can select and copy the text.", "error"); } }}><Copy size={16} /></IconButton><IconButton label={current?.saved ? "Unsave phrase" : "Save to phrasebook"} className={current?.saved ? "is-saved" : ""} disabled={!output || loading || saving} onClick={save}>{saving ? <Spinner size={16} /> : current?.saved ? <Bookmark size={17} fill="currentColor" /> : <Bookmark size={17} />}</IconButton></div></div></div></div>
     {error && <div className="translation-error" role="alert">{error}</div>}
-    <div className="translator-footer"><span><Sparkles size={13} />{provider === "MyMemory" ? "Powered by MyMemory" : "A little language. A lot of connection."}</span><button className="button primary translate-button" onClick={translate} disabled={loading || !text.trim()}>{loading ? <Spinner size={16} /> : null}{loading ? "Translating" : "Translate"}{!loading && <ArrowUpRight size={16} />}</button></div>
-    {expanded && <div className="translation-privacy"><Check size={13} />Translations are stored in your history. Live translations are processed by MyMemory.</div>}
+    <div className="translator-footer"><span><Sparkles size={13} />{quality === "machine" ? `${provider} · machine translation` : provider === "Your phrasebook" ? "Your saved wording · reused here" : provider === "Original text" ? "Same language · no translation needed" : "Curated everyday phrases · no guesswork"}</span><button className="button primary translate-button" onClick={translate} disabled={loading || !text.trim()}>{loading ? <Spinner size={16} /> : null}{loading ? "Translating" : "Translate"}{!loading && <ArrowUpRight size={16} />}</button></div>
+    {expanded && <div className="translation-privacy"><Check size={13} />Translations are stored in your history. Only text needing live translation is sent to LibreTranslate or MyMemory.</div>}
   </section>;
 }
 

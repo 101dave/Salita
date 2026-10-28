@@ -25,7 +25,7 @@ export async function seedWorkspace(userId: string, demo = false) {
     }
     if (demo) {
       const history = [
-        ["A beautiful day", "Isang magandang araw", "tl"], ["See you soon", "Hasta pronto", "es"], ["Thank you very much", "ありがとうございます", "ja"], ["Good night", "Maayong gabii", "ceb"],
+        ["A beautiful day", "Isang magandang araw", "tl"], ["See you soon", "Hasta pronto", "es"], ["Thank you very much", "どうもありがとうございます", "ja"], ["Good night", "Maayong gabii", "ceb"],
         ["Where is the beach?", "Saan ang dalampasigan?", "tl"], ["Let's go", "Tara na", "tl"], ["Welcome home", "Bienvenue à la maison", "fr"], ["One coffee, please", "Isang kape, pakiusap", "tl"],
       ];
       history.forEach(([sourceText, translatedText, targetLang], index) => items.push({ userId, sourceText, translatedText, sourceLang: "en", targetLang, saved: false, createdAt: new Date(Date.now() - (24 + index) * 1000 * 60 * 47) }));
