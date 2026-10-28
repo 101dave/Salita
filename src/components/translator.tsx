@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDownUp, ArrowUpRight, Bookmark, Check, Copy, FileText, Languages, Mic, Sparkles, Type, Volume2, X } from "lucide-react";
 import { useWorkspace } from "./workspace-provider";
 import { IconButton, LanguageSelect, Spinner } from "./ui";
+import { AssistantPanel } from "./assistant";
 import { mutate, request } from "@/lib/client";
-import { getLanguage } from "@/lib/languages";
+import { getLanguage, nativeLanguages } from "@/lib/languages";
 import type { Translation, TranslationMetadata, TranslationQuality } from "@/lib/types";
 
 export function speak(text: string, language: string, onError: (message: string, type?: "success" | "error") => void) {
@@ -28,7 +29,15 @@ interface Recognition {
   onerror: (() => void) | null; onend: (() => void) | null;
 }
 
-export function Translator({ expanded = false }: { expanded?: boolean }) {
+export interface TranslatorContext {
+  sourceText: string;
+  translatedText: string;
+  sourceLang: string;
+  targetLang: string;
+  note?: string;
+}
+
+export function Translator({ expanded = false, onContext }: { expanded?: boolean; onContext?: (context: TranslatorContext) => void }) {
   const { data, setData, notify, toggleSaved } = useWorkspace();
   const [sourceLang, setSourceLang] = useState("en");
   const [targetLang, setTargetLang] = useState("tl");
@@ -47,6 +56,23 @@ export function Translator({ expanded = false }: { expanded?: boolean }) {
   const translationRequest = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const current = data.translations.find((item) => item.id === translationId);
+
+  // An inline callback would change identity on every parent render and re-fire
+  // the reporting effect forever, so it is kept in a ref that an effect refreshes
+  // rather than being listed as a dependency.
+  const contextSink = useRef(onContext);
+  useEffect(() => { contextSink.current = onContext; });
+
+  // Keep the assistant pointed at whatever the card is currently showing.
+  useEffect(() => {
+    contextSink.current?.({
+      sourceText: output ? text.trim() : "",
+      translatedText: output,
+      sourceLang,
+      targetLang,
+      ...(output && note ? { note } : {}),
+    });
+  }, [output, sourceLang, targetLang, note, text]);
   const bytes = new TextEncoder().encode(text).length;
 
   async function translate() {
@@ -109,12 +135,15 @@ export function Translator({ expanded = false }: { expanded?: boolean }) {
     <div className="translation-panels"><div className="translation-source">{documentName && <span className="document-name"><FileText size={12} />{documentName}</span>}<textarea aria-label="Text to translate" value={text} placeholder="Type something. Start a connection." onChange={(event) => changeInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") translate(); }} spellCheck={false} />{text && <IconButton label="Clear text" className="clear-text" onClick={() => changeInput("")}><X size={14} /></IconButton>}<div className="panel-tools"><div><IconButton label={recording ? "Stop recording" : "Use microphone"} className={recording ? "recording" : ""} onClick={record}><Mic size={17} /></IconButton><IconButton label="Listen to original" disabled={!text} onClick={() => speak(text, sourceLang, notify)}><Volume2 size={17} /></IconButton></div><span className={bytes > 500 ? "text-error" : ""}>{bytes}<span> / 500</span></span></div></div>
     <div className={`translation-output ${loading ? "is-translating" : ""}`} aria-live="polite">{loading ? <div className="translation-loading"><div className="skeleton" /><div className="skeleton" /><span>Finding the right words…</span></div> : <><div className={`translated-text ${!output ? "placeholder" : ""}`}>{output || "Your translation will appear here"}</div>{output === "Kumusta! Kumusta ka?" && targetLang === "tl" && <p className="pronunciation">koo-moos-TAH · koo-moos-TAH kah</p>}{note && output && <p className="translation-note">{note}</p>}</>}<div className="panel-tools"><span className="output-language">{output && !loading && <><span className="tiny-dot" />{getLanguage(targetLang).name}</>}</span><div><IconButton label="Listen to translation" disabled={!output || loading} onClick={() => speak(output, targetLang, notify)}><Volume2 size={17} /></IconButton><IconButton label="Copy translation" disabled={!output || loading} onClick={async () => { try { await navigator.clipboard.writeText(output); notify("Translation copied."); } catch { notify("Clipboard access is unavailable. You can select and copy the text.", "error"); } }}><Copy size={16} /></IconButton><IconButton label={current?.saved ? "Unsave phrase" : "Save to phrasebook"} className={current?.saved ? "is-saved" : ""} disabled={!output || loading || saving} onClick={save}>{saving ? <Spinner size={16} /> : current?.saved ? <Bookmark size={17} fill="currentColor" /> : <Bookmark size={17} />}</IconButton></div></div></div></div>
     {error && <div className="translation-error" role="alert">{error}</div>}
-    <div className="translator-footer"><span><Sparkles size={13} />{quality === "machine" ? `${provider} · machine translation` : provider === "Your phrasebook" ? "Your saved wording · reused here" : provider === "Original text" ? "Same language · no translation needed" : "Curated everyday phrases · no guesswork"}</span><button className="button primary translate-button" onClick={translate} disabled={loading || !text.trim()}>{loading ? <Spinner size={16} /> : null}{loading ? "Translating" : "Translate"}{!loading && <ArrowUpRight size={16} />}</button></div>
+    <div className="translator-footer"><span><Sparkles size={13} />{quality === "ai" ? `${provider} · AI translation, worth a quick check` : quality === "machine" ? `${provider} · machine translation` : provider === "Your phrasebook" ? "Your saved wording · reused here" : provider === "Original text" ? "Same language · no translation needed" : "Curated everyday phrases · no guesswork"}</span><button className="button primary translate-button" onClick={translate} disabled={loading || !text.trim()}>{loading ? <Spinner size={16} /> : null}{loading ? "Translating" : "Translate"}{!loading && <ArrowUpRight size={16} />}</button></div>
     {expanded && <div className="translation-privacy"><Check size={13} />Translations are stored in your history. Only text needing live translation is sent to LibreTranslate or MyMemory.</div>}
   </section>;
 }
 
 export function TranslatePage() {
   const { navigate } = useWorkspace();
-  return <><div className="page-heading"><div><span className="eyebrow">WORDS WITHOUT BORDERS</span><h1>Every word opens a door<span className="green-period">.</span></h1><p>From a simple hello to a meaningful conversation.</p></div><span className="soft-badge"><span className="tiny-dot" />28 languages, one workspace</span></div><Translator expanded /><div className="translation-notes"><div className="card"><span className="section-icon mint"><Languages size={21} /></span><h3>Local words. Real connections.</h3><p>Explore Filipino, Cebuano, Ilocano, Hiligaynon, Waray, Kapampangan, Pangasinan, and Bikol. Regional language coverage varies; everyday phrases are built in.</p><button className="text-button" onClick={() => navigate("learn")}>Meet the languages <ArrowUpRight size={15} /></button></div><div className="card"><span className="section-icon peach"><Bookmark size={21} /></span><h3>Keep the words that matter.</h3><p>Tap the bookmark on any translation to add it to your phrasebook. Organize your favorites into collections for your next trip or conversation.</p><button className="text-button" onClick={() => navigate("phrasebook")}>Open your phrasebook <ArrowUpRight size={15} /></button></div></div></>;
+  const [context, setContext] = useState<TranslatorContext>({ sourceText: "", translatedText: "", sourceLang: "en", targetLang: "tl" });
+  return <><div className="page-heading"><div><span className="eyebrow">PHILIPPINE LANGUAGES, ONE WORKSPACE</span><h1>Every word opens a door<span className="green-period">.</span></h1><p>From a simple hello to a meaningful conversation.</p></div><span className="soft-badge"><span className="tiny-dot" />{nativeLanguages.length} Philippine languages, one workspace</span></div>
+  <div className="translate-layout"><Translator expanded onContext={setContext} /><AssistantPanel context={context} /></div>
+  <div className="translation-notes"><div className="card"><span className="section-icon mint"><Languages size={21} /></span><h3>Local words. Real connections.</h3><p>Explore Filipino, Cebuano, Ilocano, Hiligaynon, Waray, Kapampangan, Pangasinan, and Bikol. Every phrase is checked against a published dictionary or phrasebook, and anything we cannot source is left out rather than guessed.</p><button className="text-button" onClick={() => navigate("learn")}>Meet the languages <ArrowUpRight size={15} /></button></div><div className="card"><span className="section-icon purple"><Sparkles size={21} /></span><h3>Salita AI, when you need more than a word.</h3><p>Text the curated phrasebook doesn’t cover is translated by a language model that understands Philippine regional languages. The assistant beside it explains nuance, gives examples, and practises with you.</p><button className="text-button" onClick={() => navigate("settings")}>AI preferences <ArrowUpRight size={15} /></button></div><div className="card"><span className="section-icon peach"><Bookmark size={21} /></span><h3>Keep the words that matter.</h3><p>Tap the bookmark on any translation to add it to your phrasebook. Organize your favorites into collections for your next trip or conversation.</p><button className="text-button" onClick={() => navigate("phrasebook")}>Open your phrasebook <ArrowUpRight size={15} /></button></div></div></>;
 }

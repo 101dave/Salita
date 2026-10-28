@@ -133,7 +133,7 @@ export function LessonDialog(code: string): void {
 }
 
 export function LearnPage(): { element: HTMLElement; refresh: () => void } {
-  let tab: "philippine" | "world" | "started" = "philippine";
+  let tab: "philippine" | "started" = "philippine";
   let query = "";
 
   const grid = h("div", { class: "learning-grid" });
@@ -144,14 +144,12 @@ export function LearnPage(): { element: HTMLElement; refresh: () => void } {
 
   function available(): Language[] {
     if (tab === "philippine") return nativeLanguages;
-    if (tab === "world") return languages.filter((item) => !item.philippine && item.code !== "en");
     return languages.filter((item) => store.data.progress.some((progress) => progress.language === item.code && progress.completed > 0));
   }
 
   function paintTabs() {
     const items: { id: typeof tab; label: string; count?: number }[] = [
       { id: "philippine", label: "Philippine languages", count: nativeLanguages.length },
-      { id: "world", label: "World languages" },
       { id: "started", label: "My learning" },
     ];
     replace(tabs, ...items.map((item) => h("button", {

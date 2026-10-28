@@ -86,7 +86,7 @@ async function main() {
   /* ------------------------------------------------------ overview */
   const values = $$(".stat-value").map((card) => (card.childNodes[0].textContent || "").trim());
   assert.equal(values.length, 4, "four stat cards");
-  assert.deepEqual(values, ["32", "24", "9", "7"], `starter stats, saw ${values.join(", ")}`);
+  assert.deepEqual(values, ["32", "24", "8", "7"], `starter stats, saw ${values.join(", ")}`);
   assert.ok($$(".stat-value")[3].textContent?.includes("days"), "the streak shows its unit");
   assert.equal($(".nav-badge")?.textContent, "24", "phrasebook badge counts saved phrases");
   assert.equal($(".translated-text")?.textContent, "Kumusta! Kumusta ka?", "the translator starts with a friendly example");
@@ -119,6 +119,27 @@ async function main() {
   await waitFor(() => $(".translated-text")?.textContent === "Magandang umaga", "the remembered translation");
   assert.ok($(".translator-footer")?.textContent?.includes("Your saved wording"), "saved wording takes precedence");
   assert.ok($(".translation-note")?.textContent?.includes("Using your saved wording"), "the note explains the reuse");
+
+  // Waray "I love you" carries the -hi- infix; this is the corrected wording.
+  const targetSelect = $('.translator-languages select[aria-label="Translate to"]') as HTMLSelectElement;
+  assert.equal(Array.from(targetSelect.options).length, 9, "nine languages offered");
+  assert.equal(Array.from(targetSelect.options).some((option) => option.value === "ja"), false, "Japanese is gone");
+  assert.equal(Array.from(targetSelect.options).some((option) => option.value === "es"), false, "Spanish is gone");
+  targetSelect.value = "war";
+  targetSelect.dispatchEvent(new window.Event("change", { bubbles: true }));
+  await tick();
+  type($(".translation-source textarea")!, "I love you");
+  click(byText(".translate-button", "Translate"));
+  await waitFor(() => $(".translated-text")?.textContent === "Hinihigugma ko ikaw", "the dictionary-verified Waray wording");
+
+  /* ------------------------------------------------------- assistant */
+  assert.ok($(".assistant-card"), "the AI assistant sits beside the translator");
+  assert.equal($$(".assistant-starter").length, 4, "four suggested starters");
+  click($(".assistant-starter"));
+  await waitFor(() => Boolean($(".assistant-error")), "the assistant reports its offline failure");
+  assert.equal($$(".assistant-message.user").length, 1, "the question is recorded");
+  assert.match($(".assistant-error")?.textContent || "", /offline|couldn’t/i, "a friendly failure, not a crash");
+  assert.ok($$(".assistant-chip").length >= 4, "follow-up chips appear after a question");
 
   const saveButton = $('.translation-output [aria-label="Save to phrasebook"]');
   click(saveButton);
@@ -186,9 +207,8 @@ async function main() {
   assert.equal($(".modal-backdrop"), null, "lesson dialog closes");
   assert.ok(byText(".course-progress-label", "4 of 12 lessons"), "Filipino progress advanced to 4");
 
-  click(byText(".resource-tabs > button", "World languages"));
-  await tick();
-  assert.equal($$(".learning-grid .course-card").length, 19, "nineteen world languages");
+  assert.equal($$(".resource-tabs > button").length, 2, "only Philippine languages and My learning");
+  assert.equal(byText(".resource-tabs > button", "World languages"), undefined, "the world languages tab is gone");
   click(byText(".resource-tabs > button", "My learning"));
   await tick();
   assert.ok($$(".learning-grid .course-card").length >= 2, "languages in progress are listed");
@@ -217,6 +237,18 @@ async function main() {
   await tick();
   assert.ok($(".sidebar-user")?.textContent?.includes("Maria Santos"), "the sidebar follows the new name");
   assert.ok($('.settings-side')?.textContent?.includes("LibreTranslate"), "live translation settings are explained");
+  assert.ok($('.settings-side')?.textContent?.includes("Salita AI"), "the AI preference is explained");
+  const aiToggle = $('.settings-side input[type="checkbox"]') as HTMLInputElement | null;
+  assert.ok(aiToggle, "the AI toggle exists");
+  assert.equal(aiToggle?.checked, true, "AI starts enabled");
+  aiToggle!.checked = false;
+  click(byText(".settings-side .button", "Save AI preference"));
+  await tick();
+  assert.ok($(".toast")?.textContent?.includes("AI is off"), "the toggle confirms");
+  aiToggle!.checked = true;
+  click(byText(".settings-side .button", "Save AI preference"));
+  await tick();
+  assert.ok($(".toast")?.textContent?.includes("AI is on"), "AI can be switched back on");
 
   click(byText(".settings-side .button", "Reset workspace"));
   await waitFor(() => Boolean($(".delete-dialog")), "the reset confirmation");

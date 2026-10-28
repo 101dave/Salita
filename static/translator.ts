@@ -6,6 +6,7 @@ import { ArrowDownUp, ArrowUpRight, Bookmark, Check, Copy, FileText, Languages, 
 import type { TranslationQuality } from "@/lib/types";
 import { getLanguage, h, icon, iconButton, languageSelect, notify, replace, speak, spinner, store } from "./core";
 import { BYTE_LIMIT, byteLength, translateText } from "./translate";
+import { setAssistantContext } from "./assistant";
 
 interface State {
   sourceLang: string;
@@ -188,11 +189,13 @@ export function Translator(expanded = false): HTMLElement {
   }
 
   function renderFooter() {
-    replace(providerNote, icon(Sparkles, 13), state.quality === "machine"
-      ? `${state.provider} · machine translation`
-      : state.provider === "Your phrasebook" ? "Your saved wording · reused here"
-        : state.provider === "Original text" ? "Same language · no translation needed"
-          : "Curated everyday phrases · no guesswork");
+    replace(providerNote, icon(Sparkles, 13), state.quality === "ai"
+      ? `${state.provider} · AI translation, worth a quick check`
+      : state.quality === "machine"
+        ? `${state.provider} · machine translation`
+        : state.provider === "Your phrasebook" ? "Your saved wording · reused here"
+          : state.provider === "Original text" ? "Same language · no translation needed"
+            : "Curated everyday phrases · no guesswork");
     translateButton.disabled = state.loading || !state.text.trim();
     replace(translateButton, 
       state.loading ? spinner(16) : false,
@@ -217,6 +220,8 @@ export function Translator(expanded = false): HTMLElement {
     state.quality = "curated";
     state.note = "";
     state.error = "";
+    // Keep the assistant pointed at the languages in play even before a result.
+    setAssistantContext({ sourceText: "", translatedText: "", note: undefined, sourceLang: state.sourceLang, targetLang: state.targetLang });
     renderOutput();
     renderFooter();
     renderError();
@@ -245,6 +250,7 @@ export function Translator(expanded = false): HTMLElement {
     targetSelect.value = state.targetLang;
     state.text = nextText;
     textarea.value = nextText;
+    setAssistantContext({ sourceLang: state.sourceLang, targetLang: state.targetLang });
     renderSource();
     renderFooter();
   }
@@ -269,6 +275,13 @@ export function Translator(expanded = false): HTMLElement {
       state.provider = result.provider;
       state.quality = result.quality;
       state.note = result.note || "";
+      setAssistantContext({
+        sourceText: result.sourceText,
+        translatedText: result.translatedText,
+        sourceLang: result.sourceLang,
+        targetLang: result.targetLang,
+        ...(result.note ? { note: result.note } : { note: undefined }),
+      });
       state.translationId = store.addTranslation({
         sourceText: result.sourceText,
         translatedText: result.translatedText,

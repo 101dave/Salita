@@ -252,7 +252,7 @@ function ActivityDialog(): void {
         sectionIcon(Globe2, "blue"),
         h("span", null,
           h("strong", null, "A world of new possibilities"),
-          h("p", null, `${nativeLanguages.length} Philippine languages and ${languages.filter((item) => !item.philippine && item.code !== "en").length} world languages are ready to explore.`))),
+          h("p", null, `${nativeLanguages.length} Philippine languages — from Filipino to Bikol — are ready to explore.`))),
       h("button", { class: "button primary", type: "button", onClick: () => { close(); navigate("learn"); } }, "Make time for a little learning", icon(ArrowUpRight, 16)),
       h("p", { class: "activity-bottom" }, icon(Check, 13), "You’re right where you need to be."))],
   });
