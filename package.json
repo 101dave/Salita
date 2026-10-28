@@ -5,9 +5,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "build:static": "tsx scripts/build-static.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:translation": "tsx scripts/translation-test.ts"
+    "test:translation": "tsx scripts/translation-test.ts",
+    "test:static": "tsx scripts/static-smoke-test.ts"
   },
   "dependencies": {
     "@playwright/test": "^1.64.1",
@@ -21,13 +23,17 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.17",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "22.19.15",
     "@types/pg": "8.18.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "drizzle-kit": "0.31.10",
+    "esbuild": "^0.28.2",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "jsdom": "^30.1.3",
+    "lucide": "^1.63.0",
     "postcss": "8.5.8",
     "tailwindcss": "4.1.17",
     "tsx": "^4.23.15",
