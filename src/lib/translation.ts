@@ -111,6 +111,43 @@ export function selectMyMemoryTranslation(payload: MyMemoryPayload, source: stri
   return best;
 }
 
+export interface ProtectedTranslationText {
+  text: string;
+  tokens: string[];
+}
+
+/**
+ * Keep identifiers and values out of the language model's vocabulary. This is
+ * especially useful for travel messages containing a link, email, price, or
+ * date. Unknown wording around the tokens is still translated normally.
+ */
+export function protectTranslationTokens(text: string): ProtectedTranslationText {
+  const tokens: string[] = [];
+  const protectedText = text.replace(/(?:https?:\/\/|www\.)[^\s<>"']+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b\d+(?:[.,]\d+)*\b/g, (match) => {
+    const trailing = match.match(/[.,!?;:]+$/)?.[0] || "";
+    const token = trailing ? match.slice(0, -trailing.length) : match;
+    const index = tokens.push(token) - 1;
+    return `__SALITA_${index}__${trailing}`;
+  });
+  return { text: protectedText, tokens };
+}
+
+export function restoreTranslationTokens(text: string, protectedText: ProtectedTranslationText): string | null {
+  let restored = text;
+  for (const [index, token] of protectedText.tokens.entries()) {
+    const marker = new RegExp(`__\\s*SALITA[_\\s-]*${index}\\s*__`, "gi");
+    if (!marker.test(restored)) {
+      // A provider may have preserved the original token itself. Losing both
+      // the marker and the value would silently corrupt the translation.
+      if (!restored.includes(token)) return null;
+      continue;
+    }
+    marker.lastIndex = 0;
+    restored = restored.replace(marker, token);
+  }
+  return restored;
+}
+
 const providerNote = "Machine translation. Review names, tone, and regional wording before relying on it.";
 const languageCode = (code: string, provider: "mymemory" | "libre") => {
   if (provider === "libre" && code === "zh-CN") return "zh";
@@ -120,32 +157,38 @@ const languageCode = (code: string, provider: "mymemory" | "libre") => {
 async function translateWithLibreTranslate(text: string, source: string, target: string): Promise<MachineTranslation> {
   const base = process.env.LIBRETRANSLATE_URL;
   if (!base) throw new TranslationProviderError("LibreTranslate is not configured.");
+  const protectedInput = protectTranslationTokens(text);
   const endpoint = `${base.replace(/\/$/, "")}/translate`;
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(process.env.LIBRETRANSLATE_API_KEY ? { Authorization: `Bearer ${process.env.LIBRETRANSLATE_API_KEY}` } : {}) },
-    body: JSON.stringify({ q: text, source: languageCode(source, "libre"), target: languageCode(target, "libre"), format: "text", ...(process.env.LIBRETRANSLATE_API_KEY ? { api_key: process.env.LIBRETRANSLATE_API_KEY } : {}) }),
+    body: JSON.stringify({ q: protectedInput.text, source: languageCode(source, "libre"), target: languageCode(target, "libre"), format: "text", ...(process.env.LIBRETRANSLATE_API_KEY ? { api_key: process.env.LIBRETRANSLATE_API_KEY } : {}) }),
     signal: AbortSignal.timeout(10000),
     cache: "no-store",
   });
   if (!response.ok) throw new TranslationProviderError("LibreTranslate unavailable.");
   const result = await response.json() as { translatedText?: unknown };
   const translated = cleanProviderText(result.translatedText);
-  if (!translated || !isPlausibleTranslation(text, translated)) throw new TranslationProviderError("LibreTranslate returned an unusable result.");
-  return { text: translated, provider: "LibreTranslate", quality: "machine", note: providerNote };
+  if (!translated || !isPlausibleTranslation(protectedInput.text, translated)) throw new TranslationProviderError("LibreTranslate returned an unusable result.");
+  const restored = restoreTranslationTokens(translated, protectedInput);
+  if (!restored) throw new TranslationProviderError("LibreTranslate dropped a protected value.");
+  return { text: restored, provider: "LibreTranslate", quality: "machine", note: providerNote };
 }
 
 async function translateWithMyMemory(text: string, source: string, target: string): Promise<MachineTranslation> {
-  const params = new URLSearchParams({ q: text, langpair: `${languageCode(source, "mymemory")}|${languageCode(target, "mymemory")}` });
+  const protectedInput = protectTranslationTokens(text);
+  const params = new URLSearchParams({ q: protectedInput.text, langpair: `${languageCode(source, "mymemory")}|${languageCode(target, "mymemory")}` });
   if (process.env.MYMEMORY_API_KEY) params.set("key", process.env.MYMEMORY_API_KEY);
   if (process.env.MYMEMORY_EMAIL) params.set("de", process.env.MYMEMORY_EMAIL);
   const response = await fetch(`https://api.mymemory.translated.net/get?${params}`, { signal: AbortSignal.timeout(12000), cache: "no-store" });
   if (!response.ok) throw new TranslationProviderError("MyMemory unavailable.");
   const result = await response.json() as MyMemoryPayload;
   if (result.quotaFinished || Number(result.responseStatus) !== 200) throw new TranslationProviderError("MyMemory quota or language-pair error.");
-  const translated = selectMyMemoryTranslation(result, text);
+  const translated = selectMyMemoryTranslation(result, protectedInput.text);
   if (!translated) throw new TranslationProviderError("MyMemory returned an unusable result.");
-  return { text: translated, provider: "MyMemory", quality: "machine", note: providerNote };
+  const restored = restoreTranslationTokens(translated, protectedInput);
+  if (!restored) throw new TranslationProviderError("MyMemory dropped a protected value.");
+  return { text: restored, provider: "MyMemory", quality: "machine", note: providerNote };
 }
 
 /** Use a configured neural/self-hosted provider first, with MyMemory as a fallback. */
