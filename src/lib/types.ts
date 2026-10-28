@@ -12,6 +12,14 @@ export interface Translation {
   createdAt: string;
 }
 
+export type TranslationQuality = "curated" | "remembered" | "machine" | "direct";
+
+export interface TranslationMetadata {
+  provider: string;
+  quality: TranslationQuality;
+  note?: string;
+}
+
 export interface Collection {
   id: string;
   userId: string;

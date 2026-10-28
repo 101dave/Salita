@@ -1,4 +1,4 @@
-import { phrases } from "./languages";
+import { normalizeText, phrases } from "./languages";
 
 const basics = ["Hello", "Good morning", "Thank you", "How are you?", "I love you", "Good evening"];
 const world: Record<string, string[]> = {
@@ -28,15 +28,37 @@ export function getVocabulary(language: string): { source: string; translated: s
   return phrases.map((phrase) => ({ source: phrase.en, translated: phrase[language as keyof typeof phrase] || phrase.en }));
 }
 
-export function findLessonTranslation(text: string, source: string, target: string): string | null {
-  const normalize = (value: string) => value.toLowerCase().replace(/[\p{P}\p{S}]/gu, "").replace(/\s+/g, " ").trim();
+function findExactLessonTranslation(text: string, source: string, target: string): string | null {
   if (source === "en" && world[target]) {
-    const index = basics.findIndex((phrase) => normalize(phrase) === normalize(text));
+    const index = basics.findIndex((phrase) => normalizeText(phrase) === normalizeText(text));
     return index >= 0 ? world[target][index] : null;
   }
   if (target === "en" && world[source]) {
-    const index = world[source].findIndex((phrase) => normalize(phrase) === normalize(text));
+    const index = world[source].findIndex((phrase) => normalizeText(phrase) === normalizeText(text));
     return index >= 0 ? basics[index] : null;
   }
+  // The same reviewed beginner phrases can also serve as a safe bridge between
+  // two world languages; do not use a machine pivot for unknown wording.
+  if (world[source] && world[target]) {
+    const index = world[source].findIndex((phrase) => normalizeText(phrase) === normalizeText(text));
+    return index >= 0 ? world[target][index] : null;
+  }
   return null;
+}
+
+export function findLessonTranslation(text: string, source: string, target: string): string | null {
+  const direct = findExactLessonTranslation(text, source, target);
+  if (direct) return direct;
+  const segments = (text.trim().match(/[^.!?\n]+[.!?]?|\n+/g) || []).filter((segment) => /[\p{L}\p{N}]/u.test(segment));
+  if (segments.length < 2 || segments.length > 8) return null;
+  const translated: string[] = [];
+  for (const segment of segments) {
+    const value = segment.trim();
+    const punctuation = value.match(/[.!?]+$/)?.[0] || "";
+    const body = punctuation ? value.slice(0, -punctuation.length) : value;
+    const part = findExactLessonTranslation(body, source, target);
+    if (!part) return null;
+    translated.push(`${part}${punctuation && !/[.!?。！？]$/u.test(part) ? punctuation : ""}`);
+  }
+  return translated.join(["ja", "zh-CN", "th"].includes(target) ? "" : " ");
 }
